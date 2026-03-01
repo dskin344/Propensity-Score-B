@@ -1,7 +1,7 @@
 import pandas as pd
 
 from scipy import stats
-
+from scipy.stats import chi2_contingency
 
 
 
@@ -9,8 +9,6 @@ def analyze_continuous_column(df, column_name):
     """
     Test for normality and return appropriate central tendency and spread.
     
-    Returns:
-    - Dictionary with normality test, central tendency measure, and IQR
     """
     alpha = 0.05
     data = df[column_name].dropna()
@@ -32,15 +30,12 @@ def analyze_continuous_column(df, column_name):
         central_tendency = data.median()
         measure = "Median"
     
-    return {column_name :{
-        'central_tendency_value': central_tendency,
-        'q1': q1,
-        'q3': q3}
-    }
+    return f"{central_tendency} [IQR, {q1}-{q3}]"
 
 def analyze_categorical_column(df, column_name):
     """
     Analyze categorical column: return mode and frequency distribution.
+    
     """
     data = df[column_name].dropna()
     
@@ -62,19 +57,11 @@ def analyze_categorical_column(df, column_name):
         'value_counts': value_counts.to_dict()
     }
 
-def calculate_p_value(df, column1, column2, alpha=0.05):
+def p_val_continuous(df, column1, column2, alpha=0.05):
     """
     Calculate p-value comparing two columns.
     Automatically chooses t-test (normal) or Mann-Whitney U (non-normal).
-    
-    Parameters:
-    - df: DataFrame
-    - column1: name of first column
-    - column2: name of second column
-    - alpha: significance level for normality test
-    
-    Returns:
-    - Dictionary with test used and p-value
+
     """
     data1 = df[column1].dropna()
     data2 = df[column2].dropna()
@@ -92,5 +79,24 @@ def calculate_p_value(df, column1, column2, alpha=0.05):
     else:
         _, p_value = stats.mannwhitneyu(data1, data2)
         test_name = "Mann-Whitney U"
+    
+    return p_value
+
+
+def p_val_categorical(df1, df2, column_name):
+    """
+    Calculate p-value for categorical column using Chi-Square test.
+    """
+    # Create contingency table
+    contingency_table = pd.crosstab(
+        pd.concat([
+            pd.Series(['Sheet1']*len(df1), index=df1.index),
+            pd.Series(['Sheet2']*len(df2), index=df2.index)
+        ]),
+        pd.concat([df1[column_name], df2[column_name]])
+    )
+    
+    # Perform chi-square test
+    chi2, p_value, dof, expected = chi2_contingency(contingency_table)
     
     return p_value
