@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 
 from scipy import stats
+from rich.table import Table
 from scipy.stats import chi2_contingency, fisher_exact
 
 
@@ -11,8 +13,8 @@ def analyze_continuous_column(df, column_name):
     
     """
     alpha = 0.05
-    data = df[column_name]
-    data = df[data != 'N/A'].dropna()
+
+    data = df[column_name].replace('N/A', np.nan).dropna()
     
     # Test for normality (Shapiro-Wilk)
     _, p_value = stats.shapiro(data)
@@ -21,32 +23,32 @@ def analyze_continuous_column(df, column_name):
     # Calculate IQR
     q1 = data.quantile(0.25)
     q3 = data.quantile(0.75)
-    iqr = q3 - q1
     
     # Choose central tendency based on normality
     if is_normal:
         central_tendency = data.mean()
-        measure = "Mean"
     else:
         central_tendency = data.median()
-        measure = "Median"
     
-    return f"{central_tendency} [IQR, {q1}-{q3}]"
+    return f"{central_tendency:.2f} [IQR, {q1:.2f}-{q3:.2f}]"
 
-def analyze_categorical_column(df, column_name):
+def analyze_categorical_column(df, column_name, categories):
     """
     Analyze categorical column: return mode and frequency distribution.
 
     """
-    data = df[column_name]
-    data = df[data != 'N/A'].dropna()
+    data = df[column_name].replace('N/A', np.nan).dropna()
     
     value_counts = data.value_counts()
     
     results = {}
-    for category, count in value_counts.items():
-        percentage = (count / len(data)) * 100
-        results[category] = f"{count} ({percentage}%)"
+    for category in categories:
+        if category in value_counts.index:
+            count = value_counts[category]
+            percentage = (count / len(data)) * 100
+            results[str(category)] = f"{count} ({percentage:.2f}%)"
+        else:
+            results[str(category)] = "0 (0.00%)"
     
     return results
 
@@ -56,11 +58,9 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
     Automatically chooses t-test (normal) or Mann-Whitney U (non-normal).
 
     """
-    data1 = df1[column_name]
-    data1 = df1[data1 != 'N/A'].dropna()
 
-    data2 = df2[column_name]
-    data2 = df2[data2 != 'N/A'].dropna()
+    data1 = df1[column_name].replace('N/A', np.nan).dropna()
+    data2 = df2[column_name].replace('N/A', np.nan).dropna()
     
     # Test normality for both columns
     _, p1 = stats.shapiro(data1)
@@ -71,12 +71,10 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
     # Choose appropriate test
     if both_normal:
         _, p_value = stats.ttest_ind(data1, data2)
-        test_name = "t-test"
     else:
         _, p_value = stats.mannwhitneyu(data1, data2)
-        test_name = "Mann-Whitney U"
     
-    return p_value
+    return f"{p_value:.2f}"
 
 
 def p_val_categorical(df1, df2, column_name):
@@ -90,10 +88,10 @@ def p_val_categorical(df1, df2, column_name):
     # Create contingency table
     contingency_table = pd.crosstab(
         pd.concat([
-            pd.Series(['Sheet1']*len(df1), index=df1.index),
-            pd.Series(['Sheet2']*len(df2), index=df2.index)
-        ]),
-        pd.concat([df1[column_name], df2[column_name]])
+            pd.Series(['Sheet1']*len(df1)),
+            pd.Series(['Sheet2']*len(df2))
+        ], ignore_index=True),
+        pd.concat([df1[column_name], df2[column_name]], ignore_index=True)
     )
     
     # Get expected frequencies for assumption checking
@@ -112,7 +110,7 @@ def p_val_categorical(df1, df2, column_name):
     if is_2x2 and assumptions_violated:
         print("Using Fisher's Exact Test (2x2 table with small sample size)")
         _, p_value = fisher_exact(contingency_table)
-        return p_value
+        return f"{p_value:.2f}"
     
     # Case 2: Larger table with violated assumptions -> Chi-Square with Monte Carlo simulation
     elif not is_2x2 and assumptions_violated:
@@ -120,13 +118,58 @@ def p_val_categorical(df1, df2, column_name):
         print("Using Chi-Square test with Monte Carlo simulation for better accuracy.")
         
         # Run simulation-based test
-        chi2_sim, p_value_sim, dof_sim, expected_sim = chi2_contingency(
+        _, p_value_sim, _, _ = chi2_contingency(
             contingency_table, 
             lambda_="log-likelihood"
         )
-        return p_value_sim
+        return f"{p_value_sim:.2f}"
     
     # Case 3: Assumptions are met -> Standard Chi-Square test
     else:
         print("Using standard Chi-Square test (assumptions met)")
-        return p_value_chi2
+        return f"{p_value_chi2:.2f}"
+    
+def create_baseline_table(results):
+    table = Table(show_header=True, header_style="bold magenta")
+
+    table = Table(title="Analysis Results")
+    
+    table.add_column("Column", style="cyan", no_wrap=False)
+    table.add_column("Sheet 1", style="magenta", justify="right")
+    table.add_column("Sheet 2", style="magenta", justify="right")
+    table.add_column("Total", style="green", justify="right")
+    table.add_column("P-Value", style="yellow", justify="right")
+    
+    for result in results:
+        if result['type'] == 'continuous':
+            table.add_row(
+                result['column'],
+                result['sheet1'],
+                result['sheet2'],
+                result['total'],
+                result['p_value']
+            )
+        
+        elif result['type'] == 'categorical':
+            categories = result['categories']
+            
+            # Add rows for each category
+            for i, category in enumerate(categories):
+                # First category: show column name
+                if i == 0:
+                    col_display = f"[bold]{result['column']}[/bold]\n  {category}"
+                else:
+                    col_display = f"  {category}"
+                
+                # Only show p-value on first row
+                p_val_display = result['p_value'] if i == 0 else ""
+                
+                table.add_row(
+                    col_display,
+                    result['sheet1'][category],
+                    result['sheet2'][category],
+                    result['total'][category],
+                    p_val_display
+                )
+    
+    return table
