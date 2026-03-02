@@ -5,13 +5,13 @@ import pandas as pd
 from dataclasses import dataclass, field
 from rich import print
 
-from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table
+from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table, get_all_categories
 
 @dataclass
 class Config():
     file: str
     continuous_cols: list = field(default_factory=lambda: ["age", "BMI"])
-    categorical_cols: list = field(default_factory=lambda: ["raceethnic", "diabetes", "HTN", "SPY",
+    categorical_cols: list = field(default_factory=lambda: ["raceethnic", "diabetes", "HTN", "ICG angiography",
                      "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
                      "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
                      "adjuvant chemotherapy (yes=1)", "immunotherapy (keytruda?)", 
@@ -24,6 +24,10 @@ def main(cfg: Config):
     df_immediate = pd.read_excel(cfg.file, sheet_name="single stage")
     df_delayed = pd.read_excel(cfg.file, sheet_name="two-stage")
     df_total = pd.concat([df_immediate, df_delayed], ignore_index=True)
+
+    df_immediate.columns = df_immediate.columns.str.strip()
+    df_delayed.columns = df_delayed.columns.str.strip()
+    df_total.columns = df_total.columns.str.strip()
     
     # Build results list
     results = []
@@ -48,7 +52,7 @@ def main(cfg: Config):
     # Process categorical columns
     for column_name in cfg.categorical_cols:
         # Get all unique categories across all sheets
-        all_categories = set(pd.concat([df_immediate[column_name], df_delayed[column_name]]).dropna().unique())
+        all_categories = get_all_categories(df_immediate, df_delayed, column_name)
         all_categories = {str(cat) for cat in all_categories}
 
         sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories)
@@ -72,9 +76,9 @@ def main(cfg: Config):
 
             results.append({
                 'col': '',
-                'sheet 1': f"{sheet1_result[str(category)]}",
-                'sheet 2': f"{sheet2_result[str(category)]}",
-                'total': f"{total_result[str(category)]}",
+                'sheet 1': f"{sheet1_result[str(category).strip()]}",
+                'sheet 2': f"{sheet2_result[str(category).strip()]}",
+                'total': f"{total_result[str(category).strip()]}",
                 'pval': '',
                 'category': category,
                 'type':'categorical'

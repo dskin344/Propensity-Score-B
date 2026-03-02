@@ -10,14 +10,13 @@ from propensity_score_matching.utils import analyze_continuous_column, analyze_c
 @dataclass
 class Config():
     file: str
-    continuous_cols: list = field(default_factory=lambda: ["implant size"])
-    categorical_cols: list = field(default_factory=lambda: ["reoperation (no=0, yes=1)","replacement of implant/TE at same time",
-                                                            "TE capacity", "TE initial fill"])
+    continuous_cols: list = field(default_factory=lambda: ["TE capacity", "TE initial fill", "implant size"])
+    categorical_cols: list = field(default_factory=lambda: ["reoperation (no=0, yes=1)","replacement of implant/TE at same time"])
     combined_cat_cols: list = field(default_factory=lambda: ["complications_2", "complications_3", "complications_4"])
 
 def main(cfg: Config):
-    df_immediate = pd.read_excel(cfg.file, sheet_name="single stage")
-    df_delayed = pd.read_excel(cfg.file, sheet_name="two-stage")
+    df_immediate = pd.read_excel(cfg.file, sheet_name="Treatment (Matched)")
+    df_delayed = pd.read_excel(cfg.file, sheet_name="Control (Matched)")
     df_total = pd.concat([df_immediate, df_delayed], ignore_index=True)
     
     # Build results list
@@ -25,11 +24,19 @@ def main(cfg: Config):
     
     # Process continuous columns
     for column_name in cfg.continuous_cols:
-        sheet1_result = analyze_continuous_column(df_immediate, column_name)
+        try:
+            sheet1_result = analyze_continuous_column(df_immediate, column_name)
+        except:
+            sheet1_result = ''
+        
         sheet2_result = analyze_continuous_column(df_delayed, column_name)
         total_result = analyze_continuous_column(df_total, column_name)
-        p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
-        
+
+        try:
+            p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
+        except:
+            p_value_result = ''
+
         results.append({
             'col': column_name,
             'sheet 1': sheet1_result,
@@ -91,7 +98,7 @@ def main(cfg: Config):
         if i == 0:
             # First row: just column name and p-value, no data
             results.append({
-                'col': column_name,
+                'col': "Complications",
                 'sheet 1': '',
                 'sheet 2': '',
                 'total': '',
@@ -117,7 +124,7 @@ def main(cfg: Config):
     
     # Save results
     df_results = pd.DataFrame(results)
-    df_results.to_excel('data/result.xlsx', index=False)
+    df_results.to_excel('data/result_table8.xlsx', index=False)
     print("\n[green]Results saved to results.csv[/green]")
 
 

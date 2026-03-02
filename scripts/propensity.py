@@ -14,7 +14,7 @@ from propensity_score_matching.utils import load_two_sheet_data, calculate_prope
 @dataclass
 class Config():
     file: str
-    cols: list = field(default_factory=lambda: ["age", "BMI", "raceethnic", "diabetes", "HTN", "SPY",
+    cols: list = field(default_factory=lambda: ["age", "BMI", "raceethnic", "diabetes", "HTN", "ICG angiography",
                                             "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
                                             "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
                                             "adjuvant chemotherapy (yes=1)", "RT (yes=1)", "ADM/dermal sling"])

@@ -51,7 +51,7 @@ def get_all_categories(df1, df2, column_name):
                 col_data = df[col].replace('N/A', np.nan).dropna()
                 col_data = col_data[col_data.astype(str).str.strip() != '0']
                 col_data = col_data[col_data.astype(str).str.strip() != '']
-                all_values.extend(col_data.astype(str).tolist())
+                all_values.extend(col_data.astype(str).str.strip().tolist())
         
         return sorted(set(all_values))
     
@@ -62,7 +62,7 @@ def get_all_categories(df1, df2, column_name):
             df2[column_name].replace('N/A', np.nan).dropna()
         ]).unique()
         
-        return sorted([str(cat) for cat in all_categories])
+        return sorted([str(cat).strip() for cat in all_categories])
 
 def analyze_categorical_column(df, column_name, categories):
     """
@@ -88,15 +88,15 @@ def analyze_categorical_column(df, column_name, categories):
         
         total = len(df)  # Total patients, not total complications
     
-    # Handle single column (original behavior)
+    # Handle single column
     else:
         data = df[column_name].replace('N/A', np.nan).dropna()
         # Convert data to strings for consistent comparison
-        data = data.astype(str)
+        data = data.astype(str).str.strip()
         value_counts = data.value_counts()
         total = len(data)
     
-        # Build results for all categories
+    # Build results for all categories
     results = {}
     for category in categories:
         category_str = str(category).strip()
@@ -177,8 +177,8 @@ def p_val_categorical(df1, df2, column_name):
        # Handle single column (original behavior)
     else:
         # Get the data as arrays (no index issues)
-        data1 = df1[column_name].replace('N/A', np.nan).dropna().astype(str).values
-        data2 = df2[column_name].replace('N/A', np.nan).dropna().astype(str).values
+        data1 = df1[column_name].replace('N/A', np.nan).dropna().astype(str)
+        data2 = df2[column_name].replace('N/A', np.nan).dropna().astype(str)
         
         # Create contingency table
         contingency_table = pd.crosstab(
@@ -186,7 +186,7 @@ def p_val_categorical(df1, df2, column_name):
                 pd.Series(['Sheet1']*len(data1)),
                 pd.Series(['Sheet2']*len(data2))
             ], ignore_index=True),
-            pd.concat([data1[column_name], data2[column_name]], ignore_index=True)
+            pd.concat([data1, data2], ignore_index=True)
         )
     
     
