@@ -35,24 +35,78 @@ def analyze_continuous_column(df, column_name):
     
     return f"{central_tendency:.2f} [IQR, {q1:.2f}-{q3:.2f}]"
 
+def get_all_categories(df1, df2, column_name):
+    """
+    Get all unique categories from one or more columns across both dataframes.
+    
+    Args:
+        df1, df2: DataFrames
+        column_name: str or list of str
+    """
+    if isinstance(column_name, list):
+        # Multiple columns - collect all unique values
+        all_values = []
+        for df in [df1, df2]:
+            for col in column_name:
+                col_data = df[col].replace('N/A', np.nan).dropna()
+                col_data = col_data[col_data.astype(str).str.strip() != '0']
+                col_data = col_data[col_data.astype(str).str.strip() != '']
+                all_values.extend(col_data.astype(str).tolist())
+        
+        return sorted(set(all_values))
+    
+    else:
+        # Single column (original behavior)
+        all_categories = pd.concat([
+            df1[column_name].replace('N/A', np.nan).dropna(),
+            df2[column_name].replace('N/A', np.nan).dropna()
+        ]).unique()
+        
+        return sorted([str(cat) for cat in all_categories])
+
 def analyze_categorical_column(df, column_name, categories):
     """
     Analyze categorical column: return mode and frequency distribution.
 
     """
-    data = df[column_name].replace('N/A', np.nan).dropna()
-    data = data.astype(str)
+    # Handle multiple columns (e.g., complications across multiple columns)
+    if isinstance(column_name, list):
+        # Collect all values from all columns
+        all_values = []
+        for col in column_name:
+            col_data = df[col].replace('N/A', np.nan).dropna()
+            # Filter out '0' and empty strings
+            col_data = col_data[col_data.astype(str).str.strip() != '0']
+            col_data = col_data[col_data.astype(str).str.strip() != '']
+            all_values.extend(col_data.astype(str).tolist())
+        
+        # Count occurrences
+        if all_values:
+            value_counts = pd.Series(all_values).value_counts()
+        else:
+            value_counts = pd.Series([], dtype=int)
+        
+        total = len(df)  # Total patients, not total complications
     
-    value_counts = data.value_counts()
+    # Handle single column (original behavior)
+    else:
+        data = df[column_name].replace('N/A', np.nan).dropna()
+        # Convert data to strings for consistent comparison
+        data = data.astype(str)
+        value_counts = data.value_counts()
+        total = len(data)
     
+        # Build results for all categories
     results = {}
     for category in categories:
-        if category in value_counts.index:
-            count = value_counts[category]
-            percentage = (count / len(data)) * 100
-            results[str(category)] = f"{count} ({percentage:.2f}%)"
+        category_str = str(category).strip()
+        
+        if category_str in value_counts.index:
+            count = int(value_counts[category_str])
+            percentage = (count / total) * 100
+            results[category_str] = f"{count} ({percentage:.2f}%)"
         else:
-            results[str(category)] = "0 (0.00%)"
+            results[category_str] = "0 (0.00%)"
     
     return results
 
@@ -88,14 +142,53 @@ def p_val_categorical(df1, df2, column_name):
     - Uses Chi-Square with simulation for larger tables with small samples
 
     """
-    # Create contingency table
-    contingency_table = pd.crosstab(
-        pd.concat([
-            pd.Series(['Sheet1']*len(df1)),
-            pd.Series(['Sheet2']*len(df2))
-        ], ignore_index=True),
-        pd.concat([df1[column_name], df2[column_name]], ignore_index=True)
-    )
+    # Handle multiple columns
+    if isinstance(column_name, list):
+        # Collect all values from all columns for df1
+        all_values_df1 = []
+        for col in column_name:
+            col_data = df1[col].replace('N/A', np.nan).dropna()
+            col_data = col_data[col_data.astype(str).str.strip() != '0']
+            col_data = col_data[col_data.astype(str).str.strip() != '']
+            all_values_df1.extend(col_data.astype(str).tolist())
+        
+        # Collect all values from all columns for df2
+        all_values_df2 = []
+        for col in column_name:
+            col_data = df2[col].replace('N/A', np.nan).dropna()
+            col_data = col_data[col_data.astype(str).str.strip() != '0']
+            col_data = col_data[col_data.astype(str).str.strip() != '']
+            all_values_df2.extend(col_data.astype(str).tolist())
+        
+        # Create group labels
+        groups = ['Sheet1'] * len(all_values_df1) + ['Sheet2'] * len(all_values_df2)
+        values = all_values_df1 + all_values_df2
+        
+        # Handle case where no data
+        if not values:
+            print("Warning: No valid data for p-value calculation")
+            return np.nan
+        
+        # Create contingency table
+        contingency_table = pd.crosstab(
+            pd.Series(groups),
+            pd.Series(values)
+        )
+       # Handle single column (original behavior)
+    else:
+        # Get the data as arrays (no index issues)
+        data1 = df1[column_name].replace('N/A', np.nan).dropna().astype(str).values
+        data2 = df2[column_name].replace('N/A', np.nan).dropna().astype(str).values
+        
+        # Create contingency table
+        contingency_table = pd.crosstab(
+            pd.concat([
+                pd.Series(['Sheet1']*len(data1)),
+                pd.Series(['Sheet2']*len(data2))
+            ], ignore_index=True),
+            pd.concat([data1[column_name], data2[column_name]], ignore_index=True)
+        )
+    
     
     # Get expected frequencies for assumption checking
     chi2, p_value_chi2, dof, expected = chi2_contingency(contingency_table)

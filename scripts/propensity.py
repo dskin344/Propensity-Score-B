@@ -17,11 +17,7 @@ class Config():
     cols: list = field(default_factory=lambda: ["age", "BMI", "raceethnic", "diabetes", "HTN", "SPY",
                                             "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
                                             "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
-                                            "adjuvant chemotherapy (yes=1)", "immunotherapy (keytruda?)", 
-                                            "RT (yes=1)", "adjuvant endocrine", "ADM/dermal sling",
-                                            "SLNB (yes=1)", "ALND (yes=1)", "ER +", "PR+", "HER2+", "grade1", 
-                                            "mastectomy laterality", "cancer laterality R(0), L (1), both (2)",
-                                            "clinical stage", "cancer type"])
+                                            "adjuvant chemotherapy (yes=1)", "RT (yes=1)", "ADM/dermal sling"])
     caliper: float = 0.3
 
 def main(cfg: Config):
