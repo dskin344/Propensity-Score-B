@@ -5,7 +5,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 from rich import print
 
-from src.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table
+from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table
 
 @dataclass
 class Config():

@@ -12,3 +12,7 @@ wheels/
 
 *.pdf
 data/
+*.egg-info/
+build/
+dist/
+__pycache__/

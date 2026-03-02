@@ -7,7 +7,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from rich import print
 
-from src.utils import load_two_sheet_data, calculate_propensity_scores, propensity_score_matching, assess_balance
+from propensity_score_matching.utils import load_two_sheet_data, calculate_propensity_scores, propensity_score_matching, assess_balance
 
 
 @dataclass
@@ -22,16 +22,6 @@ class Config():
                                             "mastectomy laterality", "cancer laterality R(0), L (1), both (2)",
                                             "clinical stage", "cancer type"])
     caliper: float = 0.3
-
-
-
-
-def save_matched_pairs_to_excel(matched_treated, matched_control, output_path, balance_df=None):
-    """
-    Save matched pairs to Excel with Sheet1=Treatment, Sheet2=Control.
-    """
-    
-
 
 def main(cfg: Config):
     """
@@ -94,8 +84,6 @@ def main(cfg: Config):
     balance_df = assess_balance(matched_treated, matched_control, cfg.cols)
     
     # Save results
-    save_matched_pairs_to_excel(matched_treated, matched_control, output_file, balance_df)
-
     print("\n" + "="*60)
     print("STEP 4: SAVING RESULTS TO EXCEL")
     print("="*60)
