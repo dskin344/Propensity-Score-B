@@ -3,10 +3,9 @@ import pandas as pd
 
 
 from dataclasses import dataclass, field
-from rich.table import Table
 from rich import print
 
-from utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous
+from utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table
 
 @dataclass
 class Config():
@@ -37,13 +36,13 @@ def main(cfg: Config):
         p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
         
         results.append({
-            'Column': column_name,
-            'Sheet 1': sheet1_result,
-            'Sheet 2': sheet2_result,
-            'Total': total_result,
-            'P-Value': p_value_result,
-            'Category': None,
-            'Type':'continuous'
+            'col': column_name,
+            'sheet 1': sheet1_result,
+            'sheet 2': sheet2_result,
+            'total': total_result,
+            'pval': p_value_result,
+            'category': None,
+            'type':'continuous'
         })
     
     # Process categorical columns
@@ -59,34 +58,30 @@ def main(cfg: Config):
         
 
         for i, category in enumerate(sorted(all_categories)):
+            if i == 0:
+                # First row: just column name and p-value, no data
+                results.append({
+                    'col': column_name,
+                    'sheet 1': '',
+                    'sheet 2': '',
+                    'total': '',
+                    'pval': p_value_result,
+                    'category': '',
+                    'type': 'categorical'
+                })
+
             results.append({
-                'Column': column_name if i == 0 else '',
-                'Sheet 1': f"{sheet1_result[str(category)]}",
-                'Sheet 2': f"{sheet2_result[str(category)]}",
-                'Total': f"{total_result[str(category)]}",
-                'P-Value': p_value_result if i == 0 else '',
-                'Category': category,
-                'Type':'categorical'
+                'col': '',
+                'sheet 1': f"{sheet1_result[str(category)]}",
+                'sheet 2': f"{sheet2_result[str(category)]}",
+                'total': f"{total_result[str(category)]}",
+                'pval': '',
+                'category': category,
+                'type':'categorical'
             })
     
     # Build Rich table
-    table = Table(title="Analysis Results")
-    table.add_column("Column", style="cyan")
-    table.add_column("Category", style="blue")
-    table.add_column("Sheet 1", style="magenta")
-    table.add_column("Sheet 2", style="magenta")
-    table.add_column("Total", style="green")
-    table.add_column("P-Value", style="yellow")
-    
-    for row in results:
-        table.add_row(
-            str(row['Column']),
-            str(row['Category'] if row['Category'] else ''),
-            str(row['Sheet 1']),
-            str(row['Sheet 2']),
-            str(row['Total']),
-            str(row['P-Value'])
-        )
+    table = create_baseline_table(results)
     
     print(table)
     

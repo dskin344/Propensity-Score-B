@@ -38,6 +38,7 @@ def analyze_categorical_column(df, column_name, categories):
 
     """
     data = df[column_name].replace('N/A', np.nan).dropna()
+    data = data.astype(str)
     
     value_counts = data.value_counts()
     
@@ -75,7 +76,6 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
         _, p_value = stats.mannwhitneyu(data1, data2)
     
     return f"{p_value:.2f}"
-
 
 def p_val_categorical(df1, df2, column_name):
     """
@@ -143,33 +143,30 @@ def create_baseline_table(results):
     for result in results:
         if result['type'] == 'continuous':
             table.add_row(
-                result['column'],
-                result['sheet1'],
-                result['sheet2'],
+                result['col'],
+                result['sheet 1'],
+                result['sheet 2'],
                 result['total'],
-                result['p_value']
+                result['pval']
             )
         
         elif result['type'] == 'categorical':
-            categories = result['categories']
             
-            # Add rows for each category
-            for i, category in enumerate(categories):
-                # First category: show column name
-                if i == 0:
-                    col_display = f"[bold]{result['column']}[/bold]\n  {category}"
-                else:
-                    col_display = f"  {category}"
+            # Categorical: format column name with category
+            if result['col']:  # First category (has column name)
+                col_display = f"[bold]{result['col']}[/bold]\n  {result['category']}"
+                p_val_display = result['pval']
+            else:  # Subsequent categories (no column name)
+                col_display = f"  {result['category']}"
+                p_val_display = ''
                 
-                # Only show p-value on first row
-                p_val_display = result['p_value'] if i == 0 else ""
-                
-                table.add_row(
-                    col_display,
-                    result['sheet1'][category],
-                    result['sheet2'][category],
-                    result['total'][category],
-                    p_val_display
-                )
+            
+            table.add_row(
+                col_display,
+                result['sheet 1'],
+                result['sheet 2'],
+                result['total'],
+                p_val_display
+            )
     
     return table
