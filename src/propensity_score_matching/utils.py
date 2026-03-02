@@ -333,29 +333,58 @@ def propensity_score_matching(df, treatment_col='treatment', ps_col='propensity_
 
 def calculate_standardized_mean_difference(treated, control, var):
     """
-    Calculate standardized mean difference (SMD) for balance assessment.
+    Calculate standardized mean difference for any variable type.
     """
-    try:
-        treated_numeric = pd.to_numeric(treated[var], errors='coerce')
-        control_numeric = pd.to_numeric(control[var], errors='coerce')
-        
-        if treated[var].dtype in ['float64', 'int64', 'int32', 'float32'] and treated[var].nunique() > 10:
-            mean_diff = treated_numeric.mean() - control_numeric.mean()
-            pooled_std = np.sqrt((treated_numeric.std()**2 + control_numeric.std()**2) / 2)
-            if pooled_std == 0 or pd.isna(pooled_std):
-                return 0
-            return abs(mean_diff / pooled_std)
-    except:
-        pass
+    treated_vals = treated[var].dropna()
+    control_vals = control[var].dropna()
     
-    # For categorical variables
-    if treated[var].nunique() == 2:
-        p1 = (treated[var] == treated[var].mode()[0]).mean()
-        p2 = (control[var] == control[var].mode()[0]).mean()
-        return abs(p1 - p2)
-    else:
+    if len(treated_vals) == 0 or len(control_vals) == 0:
         return np.nan
-
+    
+    # For continuous variables
+    if treated_vals.dtype in ['float64', 'int64', 'float32', 'int32']:
+        try:
+            treated_mean = treated_vals.mean()
+            control_mean = control_vals.mean()
+        
+            # Pooled standard deviation
+            treated_std = treated_vals.std()
+            control_std = control_vals.std()
+            pooled_std = np.sqrt(((len(treated_vals)-1)*treated_std**2 + (len(control_vals)-1)*control_std**2) / 
+                                (len(treated_vals) + len(control_vals) - 2))
+            
+            if pooled_std == 0:
+                print(var)
+                return np.nan
+            
+            smd = abs(treated_mean - control_mean) / pooled_std
+            return smd
+        except:
+            pass
+    
+    # For binary/categorical variables
+    
+    # Get all unique values from both groups combined
+    all_values = set(treated_vals.unique()) | set(control_vals.unique())
+    
+    if len(all_values) == 0:
+        return np.nan
+    
+    # Calculate SMD for each category and take the max
+    smd_values = []
+    for val in all_values:
+        p_treated = (treated_vals == val).mean()
+        p_control = (control_vals == val).mean()
+        
+        # Use standard SMD formula for proportions
+        pooled_p = (p_treated + p_control) / 2
+        if pooled_p * (1 - pooled_p) == 0:
+            smd_val = 0
+        else:
+            smd_val = abs(p_treated - p_control) / np.sqrt(pooled_p * (1 - pooled_p))
+        smd_values.append(smd_val)
+    
+    return max(smd_values) if smd_values else np.nan
 
 def assess_balance(matched_treated, matched_control, covariates):
     """

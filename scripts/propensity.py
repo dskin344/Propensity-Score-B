@@ -5,6 +5,7 @@ import numpy as np
 
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from rich import print
 
 from propensity_score_matching.utils import load_two_sheet_data, calculate_propensity_scores, propensity_score_matching, assess_balance
@@ -27,10 +28,6 @@ def main(cfg: Config):
     """
     Main function to run propensity score matching pipeline.
     """
-    print("="*60)
-    print("PROPENSITY SCORE MATCHING - TWO SHEET INPUT")
-    print("="*60)
-    
     # Load data from two sheets
     df_combined, df_control, df_treatment = load_two_sheet_data(cfg.file)
 
@@ -41,6 +38,7 @@ def main(cfg: Config):
     
     # Get original sheet names for error messages
     xls = pd.ExcelFile(cfg.file)
+    col_missing = False
 
     for col in cfg.cols:
         if col not in df_control.columns:
@@ -64,6 +62,26 @@ def main(cfg: Config):
         sys.exit(1)
     
     print("\n✓ All required columns are present in both sheets")
+
+    # Check for missing data
+    print("\n" + "="*60)
+    print("CHECKING FOR MISSING DATA")
+    print("="*60)
+
+    print(f"\nTotal rows in df_combined: {len(df_combined)}")
+    print(f"\nMissing values per column:")
+    print(df_combined[cfg.cols].isnull().sum())
+
+    # Check which rows have missing data
+    missing_rows = df_combined[cfg.cols].isnull().any(axis=1)
+
+    if missing_rows.sum() > 0:
+        print(f"\nRows with missing data (indices):")
+        print(df_combined[missing_rows].index.tolist())
+
+        print("Dropping rows with missing values")
+        df_combined = df_combined.replace('N/A', np.nan)
+        df_combined = df_combined.dropna(subset=cfg.cols + ['treatment'])
     
     # Calculate propensity scores
     df_combined['propensity_score'] = calculate_propensity_scores(df_combined, cfg.cols)
@@ -92,7 +110,8 @@ def main(cfg: Config):
     matched_treated_out = matched_treated.drop('treatment', axis=1, errors='ignore')
     matched_control_out = matched_control.drop('treatment', axis=1, errors='ignore')
     
-    output_path = f"\data\{cfg.file}_propensity.xlsx"
+    script_dir = Path(__file__).parent
+    output_path = script_dir.parent / f"{cfg.file[:-5]}_propensity.xlsx"
     
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         # Sheet 1: Treatment group (matched)

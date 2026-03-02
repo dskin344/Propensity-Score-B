@@ -87,7 +87,7 @@ def main(cfg: Config):
     
     # Save results
     df_results = pd.DataFrame(results)
-    df_results.to_excel('data/baseline.xlsx', index=False)
+    df_results.to_excel('data/result.xlsx', index=False)
     print("\n[green]Results saved to results.csv[/green]")
 
 
