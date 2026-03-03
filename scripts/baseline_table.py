@@ -1,3 +1,4 @@
+import sys
 import tyro
 import pandas as pd
 
@@ -5,7 +6,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 from rich import print
 
-from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table, get_all_categories
+from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table, get_all_categories, load_two_sheet_data
 
 @dataclass
 class Config():
@@ -21,13 +22,39 @@ class Config():
                      "clinical stage", "cancer type"])
 
 def main(cfg: Config):
-    df_immediate = pd.read_excel(cfg.file, sheet_name="single stage")
-    df_delayed = pd.read_excel(cfg.file, sheet_name="two-stage")
-    df_total = pd.concat([df_immediate, df_delayed], ignore_index=True)
-
+    # Load data from two sheets
+    df_total, df_immediate, df_delayed = load_two_sheet_data(cfg.file)
+    
     df_immediate.columns = df_immediate.columns.str.strip()
     df_delayed.columns = df_delayed.columns.str.strip()
     df_total.columns = df_total.columns.str.strip()
+    
+    # Get original sheet names for error messages
+    xls = pd.ExcelFile(cfg.file)
+    col_missing = False
+
+    for col in cfg.cols:
+        if col not in df_immediate.columns:
+            print(f"{xls.sheet_names[0]} missing {col}")
+            col_missing = True
+
+    #Separate for loops for readability
+    for col in cfg.cols:
+        if col not in df_delayed.columns:
+            print(f"{xls.sheet_names[1]} missing {col}")
+            col_missing = True
+        
+    # Exit if any columns are missing
+    if col_missing:
+        print("\n" + "="*60)
+        print("ERROR: MISSING REQUIRED COLUMNS")
+        print("="*60)
+        print("\nBoth sheets must contain all columns specified for matching.")
+        print("1. Add missing columns to your Excel file")
+        print("2. Re-run and select only columns that exist in both sheets")
+        sys.exit(1)
+    
+    print("\n✓ All required columns are present in both sheets")
     
     # Build results list
     results = []
