@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import statsmodels.api as sm
 
 from scipy import stats
 from rich.table import Table
@@ -7,6 +8,7 @@ from scipy.stats import ttest_ind, chi2_contingency, fisher_exact
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
+
 
 
 
@@ -569,3 +571,68 @@ def assess_balance(matched_treated, matched_control, covariates):
         print(f"  Poor (SMD ≥ 0.2):       {poor}/{len(smd_values)}")
     
     return balance_df
+
+def extract_complications(df, complication_cols):
+    """
+    Given columns, returns:
+      - a set of complications
+      - the df with new binary indicator columns for each unique complication
+    """
+    def normalize(val):
+        if pd.isna(val) or str(val).strip().lower() in ("none", "no", "n/a", "", "0"):
+            return []
+        # Split on comma, normalize each part
+        return [v.strip().replace(" ", "_").replace("/", "_").lower() 
+                for v in str(val).split("and")]
+    
+    # For each patient, collect their complications into a set
+    def get_patient_complications(row):
+        result = set()
+        for col in complication_cols:
+            result.update(normalize(row[col]))
+        return result
+
+    # Get all unique complication names across the dataset
+    all_complications = set()
+    for col in complication_cols:
+        all_complications.update(df[col].map(normalize).explode().dropna().unique())
+
+    patient_complications = df.apply(get_patient_complications, axis=1)
+
+    # Add a binary column for each unique complication
+    for complication in sorted(all_complications):
+        col_name = complication.replace(" ", "_")
+        df[col_name] = patient_complications.apply(lambda s: int(complication in s))
+
+    return all_complications, df
+
+def estimate_risk_ratio(df, outcome_col, group_col, covariate_cols):
+    """
+    Fit a Poisson GLM with robust SEs to estimate the risk ratio for the
+    treatment group vs. control, adjusted for covariates.
+    Returns a dict with: RR, 95% CI, p-value, and N.
+    """
+    cols = [outcome_col, group_col] + covariate_cols
+    subset = df[cols].dropna()
+
+    y = subset[outcome_col]
+    X = subset[[group_col] + covariate_cols]
+    print(X)
+    X = sm.add_constant(X)
+
+    model = sm.GLM(y, X, family=sm.families.Poisson()) # outputs risk ratio
+    result = model.fit(cov_type="HC0")  # HC0 = robust standard errors
+
+    coef = result.params[group_col]  # The log(Risk Ratio) for treatment vs control
+    se   = result.bse[group_col]     # Standard error of that coefficient
+    p    = result.pvalues[group_col] # p-value for the treatment effect
+
+    return {
+        "complication": outcome_col,
+        "n":            len(subset),    # Total number of patients included
+        "n_events":     int(y.sum()),   # How many patients had this complication
+        "risk_ratio":   round(np.exp(coef), 3), # exp(log RR) = the actual Risk Ratio
+        "ci_lower":     round(np.exp(coef - 1.96 * se), 3),
+        "ci_upper":     round(np.exp(coef + 1.96 * se), 3),
+        "p_value":      p,  # Raw p-value (before FDR correction)
+    }
