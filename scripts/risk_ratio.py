@@ -2,18 +2,27 @@ import sys
 import tyro
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
+
 
 from dataclasses import dataclass, field
 from statsmodels.stats.multitest import multipletests
 
-from  propensity_score_matching.utils import load_two_sheet_data
+from propensity_score_matching.utils import load_two_sheet_data, extract_complications, estimate_risk_ratio
 
 @dataclass
 class Config():
     file: str
     continuous_cols: list = field(default_factory=lambda: ["age", "BMI"])
     categorical_cols: list = field(default_factory=lambda: ["raceethnic", "diabetes", "HTN", "ICG angiography",
+                     "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
+                     "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
+                     "adjuvant chemotherapy (yes=1)", "immunotherapy (keytruda?)", 
+                     "RT (yes=1)", "adjuvant endocrine", "ADM/dermal sling",
+                     "SLNB (yes=1)", "ALND (yes=1)", "ER +", "PR+", "HER2+", "grade1", 
+                     "mastectomy laterality", "cancer laterality R(0), L (1), both (2)",
+                     "clinical stage", "cancer type"])
+    
+    covariate_cols: list = field(default_factory=lambda: ["age", "BMI", "raceethnic", "diabetes", "HTN", "ICG angiography",
                      "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
                      "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
                      "adjuvant chemotherapy (yes=1)", "immunotherapy (keytruda?)", 
@@ -41,13 +50,14 @@ def main(cfg: Config):
     xls = pd.ExcelFile(cfg.file)
     col_missing = False
 
-    for col in cfg.cols:
+    cols = cfg.complications_cols + cfg.covariate_cols
+    for col in cols:
         if col not in df_immediate.columns:
             print(f"{xls.sheet_names[0]} missing {col}")
             col_missing = True
 
     #Separate for loops for readability
-    for col in cfg.cols:
+    for col in cols:
         if col not in df_delayed.columns:
             print(f"{xls.sheet_names[1]} missing {col}")
             col_missing = True
@@ -62,51 +72,27 @@ def main(cfg: Config):
         print("2. Re-run and select only columns that exist in both sheets")
         sys.exit(1)
     
-    print("\n✓ All required columns are present in both sheets")
+    print("\n✓ All required columns are present in both sheets\n")
+    
+    complications_total, df_total = extract_complications(df_total, cfg.complications_cols)
 
-    # =============================================================================
-    # RISK RATIO ESTIMATION
-    # Poisson regression with robust standard errors directly estimates risk ratios
-    # (logistic regression gives odds ratios, which overestimate RR when events are common)
-    # =============================================================================
+    print("Total complications found:", complications_total)
 
-    def estimate_risk_ratio(df, outcome_col, group_col, covariate_cols):
-        """
-        Fit a Poisson GLM with robust SEs to estimate the risk ratio for the
-        treatment group vs. control, adjusted for covariates.
-        Returns a dict with: RR, 95% CI, p-value, and N.
-        """
-        cols = [outcome_col, group_col] + covariate_cols
-        subset = df[cols].dropna()
-
-        y = subset[outcome_col]
-        X = subset[[group_col] + covariate_cols]
-        X = sm.add_constant(X)
-
-        model = sm.GLM(y, X, family=sm.families.Poisson())
-        result = model.fit(cov_type="HC0")  # HC0 = robust standard errors
-
-        coef = result.params[group_col]
-        se   = result.bse[group_col]
-        p    = result.pvalues[group_col]
-
-        return {
-            "complication": outcome_col,
-            "n":            len(subset),
-            "n_events":     int(y.sum()),
-            "risk_ratio":   round(np.exp(coef), 3),
-            "ci_lower":     round(np.exp(coef - 1.96 * se), 3),
-            "ci_upper":     round(np.exp(coef + 1.96 * se), 3),
-            "p_value":      p,
-        }
 
     # =============================================================================
     # RUN ACROSS ALL COMPLICATIONS
     # =============================================================================
 
+    df_total = pd.get_dummies(df_total, columns=cfg.categorical_cols, drop_first=True)
+    df_total = df_total.astype({col: int for col in df_total.select_dtypes("bool").columns})
+    new_cat_cols = [col for col in df_total.columns 
+                  if any(col.startswith(category) for category in cfg.categorical_cols)]
+    covariate_cols = new_cat_cols + cfg.continuous_cols
+
+    complications_total.update("reoperation")
     results = []
-    for complication in COMPLICATION_COLS:
-        res = estimate_risk_ratio(df, complication, "group_binary", COVARIATE_COLS)
+    for complication in complications_total:
+        res = estimate_risk_ratio(df_total, complication, "treatment", covariate_cols)
         results.append(res)
 
     results_df = pd.DataFrame(results)
@@ -115,7 +101,7 @@ def main(cfg: Config):
     # FDR CORRECTION (Benjamini-Hochberg)
     # =============================================================================
 
-    reject, p_fdr, _, _ = multipletests(results_df["p_value"], alpha=ALPHA, method="fdr_bh")
+    reject, p_fdr, _, _ = multipletests(results_df["p_value"], alpha=cfg.alpha, method="fdr_bh")
 
     results_df["p_value_fdr"] = p_fdr
     results_df["significant"]  = reject
@@ -128,8 +114,8 @@ def main(cfg: Config):
     print("\n=== Risk Ratio Results (FDR-corrected) ===\n")
     print(results_df.to_string(index=False))
 
-    results_df.to_csv("risk_ratio_results.csv", index=False)
-    print("\nResults saved to risk_ratio_results.csv")
+    # results_df.to_excel("risk_ratio_results.xslx", index=False)
+    # print("\nResults saved to risk_ratio_results.xsls")
 
 
 if __name__ == "__main__":
