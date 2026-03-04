@@ -64,39 +64,28 @@ def main(cfg: Config):
     # Build results list
     results = []
     
-    # Process continuous columns
-    for column_name in cfg.continuous_cols:
-        sheet1_result = analyze_continuous_column(df_immediate, column_name)
-        sheet2_result = analyze_continuous_column(df_delayed, column_name)
-        total_result = analyze_continuous_column(df_total, column_name)
-        p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
-        
-        results.append({
-            'col': column_name,
-            'sheet 1': sheet1_result,
-            'sheet 2': sheet2_result,
-            'total': total_result,
-            'pval': p_value_result,
-            'category': None,
-            'type':'continuous'
-        })
     
-    # Process categorical columns
-    for column_name in cfg.categorical_cols:
-        # Get all unique categories across all sheets
-        all_categories = get_all_categories(df_immediate, df_delayed, column_name)
+    _, df_immediate = extract_complications(df_immediate, cfg.complications_cols)
+    _, df_delayed = extract_complications(df_delayed, cfg.complications_cols)
+    complications_total, df_total = extract_complications(df_total, cfg.complications_cols)
+    print(df_immediate.columns, df_delayed.columns, df_total.columns)
 
-        sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories)
-        sheet2_result = analyze_categorical_column(df_delayed, column_name, all_categories)
-        total_result = analyze_categorical_column(df_total, column_name, all_categories)
-        p_value_result = p_val_categorical(df_immediate, df_delayed, column_name)
+    print("Total complications found:", complications_total)
+
+    for complication in complications_total:
+        all_categories = get_all_categories(df_total, None, complication)
+
+        sheet1_result = analyze_categorical_column(df_immediate, complication, all_categories)
+        sheet2_result = analyze_categorical_column(df_delayed, complication, all_categories)
+        total_result = analyze_categorical_column(df_total, complication, all_categories)
+        p_value_result = p_val_categorical(df_immediate, df_delayed, complication)
         
 
         for i, category in enumerate(sorted(all_categories)):
             if i == 0:
                 # First row: just column name and p-value, no data
                 results.append({
-                    'col': column_name,
+                    'col': complication,
                     'sheet 1': '',
                     'sheet 2': '',
                     'total': '',
@@ -114,7 +103,7 @@ def main(cfg: Config):
                 'category': category,
                 'type':'categorical'
             })
-    
+
     
     # Build Rich table
     table = create_baseline_table(results)
@@ -122,9 +111,9 @@ def main(cfg: Config):
     print(table)
     
     # Save results
-    df_results = pd.DataFrame(results)
-    df_results.to_excel('data/result.xlsx', index=False)
-    print("\n[green]Results saved to results.csv[/green]")
+    # df_results = pd.DataFrame(results)
+    # df_results.to_excel('data/result.xlsx', index=False)
+    # print("\n[green]Results saved to results.csv[/green]")
 
 
 

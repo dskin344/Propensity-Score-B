@@ -19,7 +19,7 @@ def analyze_continuous_column(df, column_name):
     """
     alpha = 0.05
 
-    data = df[column_name].replace('N/A', np.nan).dropna()
+    data = df[column_name].dropna()
     
     # Test for normality (Shapiro-Wilk)
     _, p_value = stats.shapiro(data)
@@ -50,7 +50,7 @@ def get_all_categories(df1, df2, column_name):
         all_values = []
         for df in [df1, df2]:
             for col in column_name:
-                col_data = df[col].replace('N/A', np.nan).dropna()
+                col_data = df[col].dropna()
                 col_data = col_data[col_data.astype(str).str.strip() != '0']
                 col_data = col_data[col_data.astype(str).str.strip() != '']
                 all_values.extend(col_data.astype(str).str.strip().tolist())
@@ -58,13 +58,29 @@ def get_all_categories(df1, df2, column_name):
         return sorted(set(all_values))
     
     else:
-        # Single column (original behavior)
-        all_categories = pd.concat([
-            df1[column_name].replace('N/A', np.nan).dropna(),
-            df2[column_name].replace('N/A', np.nan).dropna()
-        ]).unique()
+        if df1 is None:
+            all_categories = pd.concat([
+            df2[column_name].dropna()]).unique()
+        elif df2 is None:
+            all_categories = pd.concat([
+            df1[column_name].dropna()]).unique()
+        else:
+            # Single column (original behavior)
+            all_categories = pd.concat([
+                df1[column_name].dropna(),
+                df2[column_name].dropna()
+            ]).unique()
+
+        all_categories = pd.Series(all_categories)
+
+        temp_all_categories = pd.to_numeric(all_categories, errors="coerce")
+
+        if not np.isnan(temp_all_categories).any():
+            all_categories = temp_all_categories.astype(int).astype(str)
+        else:
+            all_categories = all_categories.astype(str).str.strip()
         
-        return sorted([str(cat).strip() for cat in all_categories])
+        return np.array(sorted(all_categories))
 
 def analyze_categorical_column(df, column_name, categories):
     """
@@ -76,7 +92,7 @@ def analyze_categorical_column(df, column_name, categories):
         # Collect all values from all columns
         all_values = []
         for col in column_name:
-            col_data = df[col].replace('N/A', np.nan).dropna()
+            col_data = df[col].dropna()
             # Filter out '0' and empty strings
             col_data = col_data[col_data.astype(str).str.strip() != '0']
             col_data = col_data[col_data.astype(str).str.strip() != '']
@@ -92,23 +108,39 @@ def analyze_categorical_column(df, column_name, categories):
     
     # Handle single column
     else:
-        data = df[column_name].replace('N/A', np.nan).dropna()
-        # Convert data to strings for consistent comparison
-        data = data.astype(str).str.strip()
+        if column_name in df.columns:
+            data = df[column_name].dropna()
+        else:
+            df[column_name] = 0
+            data = df[column_name]
+        
+        numeric_data = pd.to_numeric(data, errors="coerce")
+
+        if numeric_data.notna().all():
+            data = numeric_data.astype(int).astype(str)
+        else:
+            data = data.astype(str).str.strip()
+
         value_counts = data.value_counts()
         total = len(data)
     
+    col_categories = pd.to_numeric(categories, errors="coerce")
+
+    if not np.isnan(col_categories).any():
+        col_categories = col_categories.astype(int).astype(str)
+    else:
+        col_categories = np.char.strip(categories.astype(str))
+
     # Build results for all categories
     results = {}
-    for category in categories:
-        category_str = str(category).strip()
-        
-        if category_str in value_counts.index:
-            count = int(value_counts[category_str])
+    for category in col_categories:
+
+        if category in value_counts.index:
+            count = int(value_counts[category])
             percentage = (count / total) * 100
-            results[category_str] = f"{count} ({percentage:.2f}%)"
+            results[category] = f"{count} ({percentage:.2f}%)"
         else:
-            results[category_str] = "0 (0.00%)"
+            results[category] = "Not found"
     
     return results
 
@@ -116,11 +148,10 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
     """
     Calculate p-value comparing two columns.
     Automatically chooses t-test (normal) or Mann-Whitney U (non-normal).
-
     """
 
-    data1 = df1[column_name].replace('N/A', np.nan).dropna()
-    data2 = df2[column_name].replace('N/A', np.nan).dropna()
+    data1 = df1[column_name].dropna()
+    data2 = df2[column_name].dropna()
     
     # Test normality for both columns
     _, p1 = stats.shapiro(data1)
@@ -149,7 +180,7 @@ def p_val_categorical(df1, df2, column_name):
         # Collect all values from all columns for df1
         all_values_df1 = []
         for col in column_name:
-            col_data = df1[col].replace('N/A', np.nan).dropna()
+            col_data = df1[col].dropna()
             col_data = col_data[col_data.astype(str).str.strip() != '0']
             col_data = col_data[col_data.astype(str).str.strip() != '']
             all_values_df1.extend(col_data.astype(str).tolist())
@@ -157,7 +188,7 @@ def p_val_categorical(df1, df2, column_name):
         # Collect all values from all columns for df2
         all_values_df2 = []
         for col in column_name:
-            col_data = df2[col].replace('N/A', np.nan).dropna()
+            col_data = df2[col].dropna()
             col_data = col_data[col_data.astype(str).str.strip() != '0']
             col_data = col_data[col_data.astype(str).str.strip() != '']
             all_values_df2.extend(col_data.astype(str).tolist())
@@ -179,8 +210,8 @@ def p_val_categorical(df1, df2, column_name):
        # Handle single column (original behavior)
     else:
         # Get the data as arrays (no index issues)
-        data1 = df1[column_name].replace('N/A', np.nan).dropna().astype(str)
-        data2 = df2[column_name].replace('N/A', np.nan).dropna().astype(str)
+        data1 = df1[column_name].dropna().astype(str)
+        data2 = df2[column_name].dropna().astype(str)
         
         # Create contingency table
         contingency_table = pd.crosstab(
@@ -579,10 +610,10 @@ def extract_complications(df, complication_cols):
       - the df with new binary indicator columns for each unique complication
     """
     def normalize(val):
-        if pd.isna(val) or str(val).strip().lower() in ("none", "no", "n/a", "", "0"):
+        if pd.isna(val) or str(val).strip().lower() in ("none", "no", "", "0"):
             return []
         # Split on comma, normalize each part
-        return [v.strip().replace(" ", "_").replace("/", "_").lower() 
+        return [v.strip().replace(" ", "_").lower() 
                 for v in str(val).split("and")]
     
     # For each patient, collect their complications into a set
@@ -604,7 +635,7 @@ def extract_complications(df, complication_cols):
         col_name = complication.replace(" ", "_")
         df[col_name] = patient_complications.apply(lambda s: int(complication in s))
 
-    return all_complications, df
+    return np.array(list(all_complications)), df
 
 def estimate_risk_ratio(df, outcome_col, group_col, covariate_cols):
     """
