@@ -111,9 +111,9 @@ def main(cfg: Config):
     print(table)
     
     # Save results
-    # df_results = pd.DataFrame(results)
-    # df_results.to_excel('data/result.xlsx', index=False)
-    # print("\n[green]Results saved to results.csv[/green]")
+    df_results = pd.DataFrame(results)
+    df_results.to_excel('data/complications.xlsx', index=False)
+    print("\n[green]Results saved to results.csv[/green]")
 
 
 
