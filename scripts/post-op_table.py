@@ -11,17 +11,12 @@ from propensity_score_matching.utils import analyze_continuous_column, analyze_c
 @dataclass
 class Config():
     file: str
-    continuous_cols: list = field(default_factory=lambda: ["age", "BMI"])
-    categorical_cols: list = field(default_factory=lambda: ["raceethnic", "diabetes", "HTN", "ICG angiography",
-                     "tobacco_history", "alcohol_history", "pre-pec", "sub-pec",
-                     "NSM", "SSM", "neoadjuvant chemotherapy (yes=1)",
-                     "adjuvant chemotherapy (yes=1)", "immunotherapy (keytruda?)", 
-                     "RT (yes=1)", "adjuvant endocrine", "ADM/dermal sling",
-                     "SLNB (yes=1)", "ALND (yes=1)", "ER +", "PR+", "HER2+", "grade1", 
-                     "mastectomy laterality", "cancer laterality R(0), L (1), both (2)",
-                     "clinical stage", "cancer type"])
+    continuous_cols: list = field(default_factory=lambda: ["implant size", "TE amount used"])
+    categorical_cols: list = field(default_factory=lambda: ["reoperation"])
     
-    complications_cols: list = field(default_factory=lambda: ["complications_2", "complications_3", "complications_4"])
+    combined_cols: list = field(default_factory=lambda: [["complications_2", "complications_3", "complications_4"], 
+                                                              ["reoperation reason"]])
+
 
 
 def main(cfg: Config):
@@ -63,28 +58,40 @@ def main(cfg: Config):
     
     # Build results list
     results = []
+    
+    # Process continuous columns
+    for column_name in cfg.continuous_cols:
+        sheet1_result = analyze_continuous_column(df_immediate, column_name)
+        sheet2_result = analyze_continuous_column(df_delayed, column_name)
+        total_result = analyze_continuous_column(df_total, column_name)
+        p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
+        
+        results.append({
+            'col': column_name,
+            'sheet 1': sheet1_result,
+            'sheet 2': sheet2_result,
+            'total': total_result,
+            'pval': p_value_result,
+            'category': None,
+            'type':'continuous'
+        })
+    
+    # Process categorical columns
+    for column_name in cfg.categorical_cols:
+        # Get all unique categories across all sheets
+        all_categories = get_all_categories(df_immediate, df_delayed, column_name)
 
-    _, df_immediate = extract_complications(df_immediate, cfg.complications_cols)
-    _, df_delayed = extract_complications(df_delayed, cfg.complications_cols)
-    complications_total, df_total = extract_complications(df_total, cfg.complications_cols)
-    print(df_immediate.columns, df_delayed.columns, df_total.columns)
-
-    print("Total complications found:", complications_total)
-
-    for complication in complications_total:
-        all_categories = get_all_categories(df_total, None, complication)
-
-        sheet1_result = analyze_categorical_column(df_immediate, complication, all_categories)
-        sheet2_result = analyze_categorical_column(df_delayed, complication, all_categories)
-        total_result = analyze_categorical_column(df_total, complication, all_categories)
-        p_value_result = p_val_categorical(df_immediate, df_delayed, complication)
+        sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories)
+        sheet2_result = analyze_categorical_column(df_delayed, column_name, all_categories)
+        total_result = analyze_categorical_column(df_total, column_name, all_categories)
+        p_value_result = p_val_categorical(df_immediate, df_delayed, column_name)
         
 
         for i, category in enumerate(sorted(all_categories)):
             if i == 0:
                 # First row: just column name and p-value, no data
                 results.append({
-                    'col': complication,
+                    'col': column_name,
                     'sheet 1': '',
                     'sheet 2': '',
                     'total': '',
@@ -102,6 +109,46 @@ def main(cfg: Config):
                 'category': category,
                 'type':'categorical'
             })
+    
+    #labels as columns
+    for list in cfg.combined_cols:
+        _, df_immediate = extract_complications(df_immediate, list)
+        _, df_delayed = extract_complications(df_delayed, list)
+        complications_total, df_total = extract_complications(df_total, list)
+
+        print("Total complications found:", complications_total)
+
+        for complication in complications_total:
+            all_categories = get_all_categories(df_total, None, complication)
+
+            sheet1_result = analyze_categorical_column(df_immediate, complication, all_categories)
+            sheet2_result = analyze_categorical_column(df_delayed, complication, all_categories)
+            total_result = analyze_categorical_column(df_total, complication, all_categories)
+            p_value_result = p_val_categorical(df_immediate, df_delayed, complication)
+            
+
+            for i, category in enumerate(sorted(all_categories)):
+                if i == 0:
+                    # First row: just column name and p-value, no data
+                    results.append({
+                        'col': complication,
+                        'sheet 1': '',
+                        'sheet 2': '',
+                        'total': '',
+                        'pval': p_value_result,
+                        'category': '',
+                        'type': 'categorical'
+                    })
+
+                results.append({
+                    'col': '',
+                    'sheet 1': f"{sheet1_result[str(category).strip()]}",
+                    'sheet 2': f"{sheet2_result[str(category).strip()]}",
+                    'total': f"{total_result[str(category).strip()]}",
+                    'pval': '',
+                    'category': category,
+                    'type':'categorical'
+                })
 
     
     # Build Rich table
@@ -111,7 +158,7 @@ def main(cfg: Config):
     
     # Save results
     df_results = pd.DataFrame(results)
-    df_results.to_excel('data/complications.xlsx', index=False)
+    df_results.to_excel('data/post-op.xlsx', index=False)
     print("\n[green]Results saved[/green]")
 
 

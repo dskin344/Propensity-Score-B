@@ -192,11 +192,13 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
     
     # Choose appropriate test
     if both_normal:
+        print("Using T-Test, both distributions are normal")
         _, p_value = stats.ttest_ind(data1, data2)
     else:
+        print("Using Mann-Whitney, one or both distributions are not normal")
         _, p_value = stats.mannwhitneyu(data1, data2)
     
-    return f"{p_value:.2f}"
+    return f"{p_value:.4f}"
 
 def p_val_categorical(df1, df2, column_name, delimited=None):
     """
