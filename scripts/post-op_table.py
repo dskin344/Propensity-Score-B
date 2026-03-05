@@ -63,8 +63,7 @@ def main(cfg: Config):
     
     # Build results list
     results = []
-    
-    
+
     _, df_immediate = extract_complications(df_immediate, cfg.complications_cols)
     _, df_delayed = extract_complications(df_delayed, cfg.complications_cols)
     complications_total, df_total = extract_complications(df_total, cfg.complications_cols)
@@ -113,7 +112,7 @@ def main(cfg: Config):
     # Save results
     df_results = pd.DataFrame(results)
     df_results.to_excel('data/complications.xlsx', index=False)
-    print("\n[green]Results saved to results.csv[/green]")
+    print("\n[green]Results saved[/green]")
 
 
 

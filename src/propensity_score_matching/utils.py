@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -37,7 +38,7 @@ def analyze_continuous_column(df, column_name):
     
     return f"{central_tendency:.2f} [IQR, {q1:.2f}-{q3:.2f}]"
 
-def get_all_categories(df1, df2, column_name):
+def get_all_categories(df1, df2, column_name, delimiter=None):
     """
     Get all unique categories from one or more columns across both dataframes.
     
@@ -45,44 +46,53 @@ def get_all_categories(df1, df2, column_name):
         df1, df2: DataFrames
         column_name: str or list of str
     """
+    all_values = []
     if isinstance(column_name, list):
         # Multiple columns - collect all unique values
-        all_values = []
         for df in [df1, df2]:
             for col in column_name:
                 col_data = df[col].dropna()
-                col_data = col_data[col_data.astype(str).str.strip() != '0']
                 col_data = col_data[col_data.astype(str).str.strip() != '']
-                all_values.extend(col_data.astype(str).str.strip().tolist())
+
+                if delimiter is None:
+                    all_values.extend(col_data.astype(str).str.strip().tolist())
+                else:
+                    for value in col_data:
+                        parts = re.split(r'\s+and\s+|,\s*', value)
+                        all_values.extend([p.strip() for p in parts if p.strip()])
         
         return sorted(set(all_values))
     
     else:
         if df1 is None:
-            all_categories = pd.concat([
-            df2[column_name].dropna()]).unique()
+            col_data = df2[column_name].dropna()
         elif df2 is None:
-            all_categories = pd.concat([
-            df1[column_name].dropna()]).unique()
+            col_data = df1[column_name].dropna()
         else:
             # Single column (original behavior)
-            all_categories = pd.concat([
+           col_data = pd.concat([
                 df1[column_name].dropna(),
-                df2[column_name].dropna()
-            ]).unique()
+                df2[column_name].dropna()])
 
-        all_categories = pd.Series(all_categories)
+        col_data = col_data[col_data.astype(str).str.strip() != '']
+        temp_col_data = pd.to_numeric(col_data, errors="coerce")
 
-        temp_all_categories = pd.to_numeric(all_categories, errors="coerce")
-
-        if not np.isnan(temp_all_categories).any():
-            all_categories = temp_all_categories.astype(int).astype(str)
+        if not np.isnan(temp_col_data).any():
+            col_data = temp_col_data.astype(int).astype(str).str.lower()
         else:
-            all_categories = all_categories.astype(str).str.strip()
-        
-        return np.array(sorted(all_categories))
+            col_data = col_data.astype(str).str.strip().str.lower().unique()
 
-def analyze_categorical_column(df, column_name, categories):
+        col_data = pd.Series(col_data)
+        if delimiter is None:
+            all_values.extend(col_data.astype(str).str.strip().tolist())
+        else:
+            for data in col_data:
+                parts = re.split(r'\s+and\s+|,\s*', data)
+                all_values.extend([p.strip() for p in parts if p.strip()])
+        
+        return np.array(sorted(set(all_values)))
+
+def analyze_categorical_column(df, column_name, categories, delimited=None):
     """
     Analyze categorical column: return mode and frequency distribution.
 
@@ -98,6 +108,14 @@ def analyze_categorical_column(df, column_name, categories):
             col_data = col_data[col_data.astype(str).str.strip() != '']
             all_values.extend(col_data.astype(str).tolist())
         
+        if delimited is not None:
+            delim_values = []
+            for values in all_values:
+                parts = re.split(r'\s+and\s+|,\s*', values)
+                delim_values.extend([p.strip() for p in parts if p.strip()])
+
+            all_values = pd.Series(delim_values)
+
         # Count occurrences
         if all_values:
             value_counts = pd.Series(all_values).value_counts()
@@ -114,6 +132,7 @@ def analyze_categorical_column(df, column_name, categories):
             df[column_name] = 0
             data = df[column_name]
         
+        data = pd.Series(data)
         numeric_data = pd.to_numeric(data, errors="coerce")
 
         if numeric_data.notna().all():
@@ -121,8 +140,20 @@ def analyze_categorical_column(df, column_name, categories):
         else:
             data = data.astype(str).str.strip()
 
-        value_counts = data.value_counts()
-        total = len(data)
+        if delimited is None:
+            data = data.dropna().astype(str).str.strip().str.lower()
+            all_values = data
+        else:
+            all_values = []
+            for da in data:
+                parts = re.split(r'\s+and\s+|,\s*', da)
+                all_values.extend([p.strip() for p in parts if p.strip()])
+
+            all_values = pd.Series(all_values).str.strip().str.lower()
+            col_categories = set(all_values)
+
+        value_counts = all_values.value_counts()
+        total = len(all_values)
     
     col_categories = pd.to_numeric(categories, errors="coerce")
 
@@ -134,7 +165,7 @@ def analyze_categorical_column(df, column_name, categories):
     # Build results for all categories
     results = {}
     for category in col_categories:
-
+        category = str(category).strip()
         if category in value_counts.index:
             count = int(value_counts[category])
             percentage = (count / total) * 100
@@ -167,7 +198,7 @@ def p_val_continuous(df1, df2, column_name, alpha=0.05):
     
     return f"{p_value:.2f}"
 
-def p_val_categorical(df1, df2, column_name):
+def p_val_categorical(df1, df2, column_name, delimited=None):
     """
     Calculate p-value for categorical column using the most appropriate test.
     - Uses Fisher's Exact Test for 2x2 tables with small samples
@@ -181,7 +212,6 @@ def p_val_categorical(df1, df2, column_name):
         all_values_df1 = []
         for col in column_name:
             col_data = df1[col].dropna()
-            col_data = col_data[col_data.astype(str).str.strip() != '0']
             col_data = col_data[col_data.astype(str).str.strip() != '']
             all_values_df1.extend(col_data.astype(str).tolist())
         
@@ -189,9 +219,22 @@ def p_val_categorical(df1, df2, column_name):
         all_values_df2 = []
         for col in column_name:
             col_data = df2[col].dropna()
-            col_data = col_data[col_data.astype(str).str.strip() != '0']
             col_data = col_data[col_data.astype(str).str.strip() != '']
             all_values_df2.extend(col_data.astype(str).tolist())
+
+        if delimited is not None:
+            delim_vals = []
+            for vals in all_values_df1:
+                parts = re.split(r'\s+and\s+|,\s*', vals)
+                delim_vals.extend([p.strip() for p in parts if p.strip()])
+            all_values_df1 = pd.Series(delim_vals)
+
+            delim_vals = []
+            for vals in all_values_df2:
+                parts = re.split(r'\s+and\s+|,\s*', vals)
+                delim_vals.extend([p.strip() for p in parts if p.strip()])
+
+            all_values_df2 = pd.Series(delim_vals)
         
         # Create group labels
         groups = ['Sheet1'] * len(all_values_df1) + ['Sheet2'] * len(all_values_df2)
@@ -212,6 +255,20 @@ def p_val_categorical(df1, df2, column_name):
         # Get the data as arrays (no index issues)
         data1 = df1[column_name].dropna().astype(str)
         data2 = df2[column_name].dropna().astype(str)
+
+        if delimited is not None:
+            delim_vals = []
+            for vals in data1:
+                parts = re.split(r'\s+and\s+|,\s*', vals)
+                delim_vals.extend([p.strip() for p in parts if p.strip()])
+            data1 = pd.Series(delim_vals)
+
+            delim_vals = []
+            for vals in data2:
+                parts = re.split(r'\s+and\s+|,\s*', vals)
+                delim_vals.extend([p.strip() for p in parts if p.strip()])
+
+            data2 = pd.Series(delim_vals)
         
         # Create contingency table
         contingency_table = pd.crosstab(
@@ -324,8 +381,8 @@ def load_two_sheet_data(input_file):
     print(f"  Sheet 1 '{sheet1_name}' → Control group (treatment=0)")
     print(f"  Sheet 2 '{sheet2_name}' → Treatment group (treatment=1)")
     
-    control_df = pd.read_excel(input_file, sheet_name=sheet1_name)
-    treatment_df = pd.read_excel(input_file, sheet_name=sheet2_name)
+    control_df = pd.read_excel(input_file, sheet_name=sheet1_name, keep_default_na=False)
+    treatment_df = pd.read_excel(input_file, sheet_name=sheet2_name, keep_default_na=False)
     
     print(f"\nOriginal sample sizes:")
     print(f"  Control:   {len(control_df)} observations")

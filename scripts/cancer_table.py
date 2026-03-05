@@ -6,16 +6,14 @@ import pandas as pd
 from dataclasses import dataclass, field
 from rich import print
 
-from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table, get_all_categories, load_two_sheet_data, extract_complications
+from propensity_score_matching.utils import analyze_continuous_column, analyze_categorical_column, p_val_categorical, p_val_continuous, create_baseline_table, get_all_categories, load_two_sheet_data
 
 @dataclass
 class Config():
     file: str
-    continuous_cols: list = field(default_factory=lambda: ["age", "BMI"])
-    categorical_cols: list = field(default_factory=lambda: ["diabetes", "HTN", "tobacco_history"])
-    
-    complications_cols: list = field(default_factory=lambda: ["complications_2", "complications_3", "complications_4"])
-
+    continuous_cols: list = field(default_factory=lambda: [])
+    categorical_cols: list = field(default_factory=lambda: ["cancer laterality", "cancer type", "grade", "clinical stage"])
+    delimited_cols: list = field(default_factory=lambda: ["cancer type", "grade", "clinical stage"])
 
 def main(cfg: Config):
     # Load data from two sheets
@@ -53,36 +51,21 @@ def main(cfg: Config):
         sys.exit(1)
     
     print("\n✓ All required columns are present in both sheets")
-    
-    # Build results list
     results = []
-    
-    # Process continuous columns
-    for column_name in cfg.continuous_cols:
-        sheet1_result = analyze_continuous_column(df_immediate, column_name)
-        sheet2_result = analyze_continuous_column(df_delayed, column_name)
-        total_result = analyze_continuous_column(df_total, column_name)
-        p_value_result = p_val_continuous(df_immediate, df_delayed, column_name)
-        
-        results.append({
-            'col': column_name,
-            'sheet 1': sheet1_result,
-            'sheet 2': sheet2_result,
-            'total': total_result,
-            'pval': p_value_result,
-            'category': None,
-            'type':'continuous'
-        })
     
     # Process categorical columns
     for column_name in cfg.categorical_cols:
         # Get all unique categories across all sheets
-        all_categories = get_all_categories(df_immediate, df_delayed, column_name)
+        deliminted = None
+        if column_name in cfg.delimited_cols:
+            deliminted = True
 
-        sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories)
-        sheet2_result = analyze_categorical_column(df_delayed, column_name, all_categories)
-        total_result = analyze_categorical_column(df_total, column_name, all_categories)
-        p_value_result = p_val_categorical(df_immediate, df_delayed, column_name)
+        all_categories = get_all_categories(df_immediate, df_delayed, column_name, delimiter=deliminted)
+
+        sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories, delimited=deliminted)
+        sheet2_result = analyze_categorical_column(df_delayed, column_name, all_categories, delimited=deliminted)
+        total_result = analyze_categorical_column(df_total, column_name, all_categories, delimited=deliminted)
+        p_value_result = p_val_categorical(df_immediate, df_delayed, column_name, delimited=deliminted)
         
 
         for i, category in enumerate(sorted(all_categories)):
@@ -100,15 +83,15 @@ def main(cfg: Config):
 
             results.append({
                 'col': '',
-                'sheet 1': f"{sheet1_result[str(category).strip()]}",
-                'sheet 2': f"{sheet2_result[str(category).strip()]}",
-                'total': f"{total_result[str(category).strip()]}",
+                'sheet 1': f"{sheet1_result[str(category)]}",
+                'sheet 2': f"{sheet2_result[str(category)]}",
+                'total': f"{total_result[str(category)]}",
                 'pval': '',
                 'category': category,
                 'type':'categorical'
             })
     
-    
+
     # Build Rich table
     table = create_baseline_table(results)
     
@@ -116,7 +99,7 @@ def main(cfg: Config):
     
     # Save results
     df_results = pd.DataFrame(results)
-    df_results.to_excel('data/baseline.xlsx', index=False)
+    df_results.to_excel('data/cancer.xlsx', index=False)
     print("\n[green]Results saved[/green]")
 
 
