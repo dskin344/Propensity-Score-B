@@ -12,7 +12,7 @@ from propensity_score_matching.utils import analyze_continuous_column, analyze_c
 class Config():
     file: str
     continuous_cols: list = field(default_factory=lambda: ["implant size", "TE amount used"])
-    categorical_cols: list = field(default_factory=lambda: ["reoperation"])
+    categorical_cols: list = field(default_factory=lambda: ["reoperation", "complication"])
     
     combined_cols: list = field(default_factory=lambda: [["complications_2", "complications_3", "complications_4"], 
                                                               ["reoperation reason"]])
