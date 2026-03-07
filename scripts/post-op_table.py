@@ -12,7 +12,7 @@ from propensity_score_matching.utils import analyze_continuous_column, analyze_c
 class Config():
     file: str
     continuous_cols: list = field(default_factory=lambda: ["implant size", "TE amount used"])
-    categorical_cols: list = field(default_factory=lambda: ["reoperation", "complication"])
+    categorical_cols: list = field(default_factory=lambda: ["reoperation", "complication", "RT"])
     
     combined_cols: list = field(default_factory=lambda: [["complications_2", "complications_3", "complications_4"], 
                                                               ["reoperation reason"]])
@@ -80,6 +80,7 @@ def main(cfg: Config):
     for column_name in cfg.categorical_cols:
         # Get all unique categories across all sheets
         all_categories = get_all_categories(df_immediate, df_delayed, column_name)
+        all_categories = all_categories[all_categories != "n/a"]
 
         sheet1_result = analyze_categorical_column(df_immediate, column_name, all_categories)
         sheet2_result = analyze_categorical_column(df_delayed, column_name, all_categories)

@@ -298,7 +298,7 @@ def p_val_categorical(df1, df2, column_name, delimited=None):
     if is_2x2 and assumptions_violated:
         print("Using Fisher's Exact Test (2x2 table with small sample size)")
         _, p_value = fisher_exact(contingency_table)
-        return f"{p_value:.2f}"
+        return f"{p_value:.4f}"
     
     # Case 2: Larger table with violated assumptions -> Chi-Square with Monte Carlo simulation
     elif not is_2x2 and assumptions_violated:
@@ -310,12 +310,12 @@ def p_val_categorical(df1, df2, column_name, delimited=None):
             contingency_table, 
             lambda_="log-likelihood"
         )
-        return f"{p_value_sim:.2f}"
+        return f"{p_value_sim:.4f}"
     
     # Case 3: Assumptions are met -> Standard Chi-Square test
     else:
         print("Using standard Chi-Square test (assumptions met)")
-        return f"{p_value_chi2:.2f}"
+        return f"{p_value_chi2:.4f}"
     
 def create_baseline_table(results):
     table = Table(show_header=True, header_style="bold magenta")
